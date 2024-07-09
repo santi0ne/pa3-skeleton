@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "bmp.h"
 /* USE THIS FUNCTION TO PRINT ERROR MESSAGES
@@ -42,7 +43,7 @@ BMP_Image* createBMPImage(FILE* fptr) {
 	}
 	
 	//Read the first 54 bytes of the source into the header
-	size_t bytes_read = fread(&(image->header), HEADER_SIZE, 1, fptr);
+	size_t bytes_read = fread(&(image->header), sizeof(BMP_Header), 1, fptr);
 	if (bytes_read != 1) {
 		printf("error al leer los 54 bytes de header\n");
 		printError(FILE_ERROR);
@@ -79,11 +80,10 @@ BMP_Image* createBMPImage(FILE* fptr) {
             		free(image);
             		return NULL;
         	}
+		memset(image->pixels[i], 0, row_size);
     	}
 
 	fseek(fptr, image->header.offset, SEEK_SET);
-
-	//readImageData(fptr, image, image->header.imagesize);
 
 	return image;
 }
@@ -103,8 +103,8 @@ void readImageData(FILE* srcFile, BMP_Image * image, int dataSize) {
 			if (fread(image->pixels[height-1-i], row_size, 1, srcFile) != 1) {
 				printf("error al leer imagen almacenada de abajo hacia arriba\n");
 				printError(FILE_ERROR);
-				for (int j=0; j<=i; j++) {
-					free(image->pixels[height-1-j]);
+				for (int j=height-1; j>=i; j--) {
+					free(image->pixels[j]);
 				}
 				free(image->pixels);
 				free(image);
@@ -132,7 +132,7 @@ void readImageData(FILE* srcFile, BMP_Image * image, int dataSize) {
 /* The input arguments are the pointer of the binary file, and the image data pointer.
  * The functions open the source file and call to CreateBMPImage to load de data image.
 */
-void readImage(FILE *srcFile, BMP_Image * dataImage) {
+void readImage(FILE *srcFile, BMP_Image *dataImage) {
 	BMP_Image *image = createBMPImage(srcFile);
 	if (!image) {
 		printf("error al crear bmp de source\n");
@@ -144,10 +144,57 @@ void readImage(FILE *srcFile, BMP_Image * dataImage) {
     	int data_size = row_size * image->norm_height;
 
 	readImageData(srcFile, image, data_size);
-	*dataImage = *image;
+	
+	// Allocate memory for dataImage if it's NULL
+    	if (dataImage == NULL) {
+        	dataImage = (BMP_Image *)malloc(sizeof(BMP_Image));
+        	if (!dataImage) {
+            		printf("Error allocating memory for dataImage\n");
+            		printError(MEMORY_ERROR);
+            		free(image->pixels);
+            		free(image);
+            		return;
+        	}
+    	}
+    	
+    	// Copy the image header
+    	memcpy(&dataImage->header, &image->header, sizeof(BMP_Header));
+    	dataImage->norm_height = image->norm_height;
+    	dataImage->bytes_per_pixel = image->bytes_per_pixel;
 
-	free(image->pixels);
-	free(image);
+    	// Allocate memory for dataImage pixels
+    	dataImage->pixels = (Pixel **)malloc(dataImage->norm_height * sizeof(Pixel *));
+    	if (!dataImage->pixels) {
+        	printf("Error allocating memory for dataImage pixels\n");
+        	printError(MEMORY_ERROR);
+        	free(image->pixels);
+        	free(image);
+        	free(dataImage);
+        	return;
+    	}
+
+    	for (int i = 0; i < dataImage->norm_height; i++) {
+        	dataImage->pixels[i] = (Pixel *)malloc(row_size);
+        	if (!dataImage->pixels[i]) {
+            		printf("Error allocating memory for row of dataImage pixels\n");
+            		printError(MEMORY_ERROR);
+            		for (int j = 0; j < i; j++) {
+                		free(dataImage->pixels[j]);
+            		}
+            		free(dataImage->pixels);
+            		free(image->pixels);
+            		free(image);
+            		free(dataImage);
+            		return;
+        	}
+        	memcpy(dataImage->pixels[i], image->pixels[i], row_size);
+    	}
+
+    	freeImage(image);
+	//memcpy(dataImage, image, sizeof(BMP_Image));
+
+	//free(image->pixels);
+	//free(image);
 }
 
 /* The input arguments are the destination file name, and BMP_Image pointer.
@@ -175,8 +222,6 @@ void writeImage(char* destFileName, BMP_Image* dataImage) {
 
 	// escribir los datos de pixeles en destino
 	int height = dataImage->norm_height;
-    	int width = dataImage->header.width_px;
-	int bytesPerPixel = dataImage->bytes_per_pixel;
 
 	if (dataImage->header.height_px > 0) {
         	// La imagen está almacenada de abajo hacia arriba

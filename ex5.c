@@ -5,7 +5,11 @@
 #include <sys/stat.h>
 
 #include "bmp.h"
+#include "filter.h"
 
+#define NUM_THREADS 4
+
+/* crea directorio en donde estara el archivo resultado */
 void createDirectoryIfNotExists(const char* path) {
 	struct stat st = {0};
 	if (stat(path, &st) == -1) {
@@ -30,7 +34,7 @@ void compareFiles(char* file1, char* file2) {
     	rewind(fp2);
 
     	if (size1 != size2) {
-        	printf("Files have different sizes: %ld vs %ld bytes.\n", size1, size2);
+        	printf("Archivos tienen diferentes tamanios: %ld vs %ld bytes.\n", size1, size2);
         	fclose(fp1);
         	fclose(fp2);
 		return;
@@ -48,69 +52,101 @@ void compareFiles(char* file1, char* file2) {
     	fclose(fp2);
 
     	if (equal) {
-        	printf("Files are identical.\n");
+        	printf("Archivos son identicos!\n");
     	} else {
-        	printf("Files are different.\n");
+        	printf("Archivos son diferentes!\n");
     	}
 
 }
 
-
 int main(int argc, char **argv) {
-	char* source_name = argv[1];
-  	char* dest_name = argv[2];
-  	BMP_Image* image = NULL;
+	
+	if (argc != 3) {
+        	printf("Error: Uso incorrecto. Debe ser: %s <archivo_entrada.bmp> <archivo_salida.bmp>\n", argv[0]);
+		printError(ARGUMENT_ERROR);
+        	exit(EXIT_FAILURE);
+    	}
 
-  	if (argc != 3) {
-    		printError(ARGUMENT_ERROR);
-    		exit(EXIT_FAILURE);
-  	}
-  
-  	FILE* source_fp = fopen(source_name, "rb");
-  	if (!source_fp) {  
-  		printf("aqui en source\n");
-    		printError(FILE_ERROR);
-    		exit(EXIT_FAILURE);
-  	}
+    	char* source_name = argv[1];
+    	char* dest_name = argv[2];
+    	BMP_Image* image_in = NULL;
+    	BMP_Image* image_out = NULL;
 
-	/*
-  	if((dest = fopen(argv[2], "wb")) == NULL) {
-    		printf("aqui en dest\n");
-    		printError(FILE_ERROR);
-    		exit(EXIT_FAILURE);
-  	} 
-	*/
+    	FILE* source_fp = fopen(source_name, "rb");
+    	if (!source_fp) {
+        	printf("Error al abrir el archivo de entrada '%s'\n", source_name);
+        	printError(FILE_ERROR);
+        	exit(EXIT_FAILURE);
+    	}
 
-  	image = createBMPImage(source_fp);
-
-  	int row_size = ((image->header.width_px * image->bytes_per_pixel + 3) / 4) * 4;
-  	int data_size = row_size * image->norm_height;
-
-  	readImageData(source_fp, image, data_size);
-
-  	fclose(source_fp);
-
+	/* creacion de directorio para archivo de salida */
 	char dest_path[1024];
-	strcpy(dest_path, dest_name);
-	char* dir = dirname(dest_path);
+	snprintf(dest_path, sizeof(dest_path), "%s", dest_name);
+	char *dir = dirname(dest_path);
 	createDirectoryIfNotExists(dir);
 
-  	writeImage(dest_name, image);
+    	FILE* dest_fp = fopen(dest_name, "wb");
+    	if (!dest_fp) {
+        	printf("Error al abrir el archivo de salida '%s'\n", dest_name);
+        	printError(FILE_ERROR);
+        	fclose(source_fp);
+        	exit(EXIT_FAILURE);
+    	}
+    
+    	// Asignar memoria para image_in antes de leer la imagen
+    	image_in = (BMP_Image *)malloc(sizeof(BMP_Image));
+    	if (image_in == NULL) {
+        	printf("Error al asignar memoria para image_in\n");
+        	free(image_in);
+		fclose(source_fp);
+        	fclose(dest_fp);
+        	exit(EXIT_FAILURE);
+    	}
 
-  	compareFiles(source_name, dest_name);
+    	// Leer la imagen de entrada
+    	readImage(source_fp, image_in);
+    	if (!image_in) {
+        	printf("Error al leer la imagen de entrada '%s'\n", source_name);
+        	printError(VALID_ERROR);
+		free(image_in);
+        	fclose(source_fp);
+        	fclose(dest_fp);
+        	exit(EXIT_FAILURE);
+    	}
+    
+    	fseek(source_fp, 0, SEEK_SET);
 
+    	// Aplicar filtro a la imagen de entrada y escribir la imagen resultante
+    	int boxFilter[3][3] = {
+        	{1, 1, 1},
+        	{1, 1, 1},
+        	{1, 1, 1}
+    	};
 
-  	if(!checkBMPValid(&image->header)) {
-    		printf("Error al check bmp\n");
-    		printError(VALID_ERROR);
-    		//exit(EXIT_FAILURE);
-  	}  
+    	image_out = createBMPImage(source_fp);  // Crear image_out NO es necesario aquí
+    	if (!image_out) {
+        	printf("Error al crear la imagen de salida '%s'\n", dest_name);
+        	printError(FILE_ERROR);
+        	freeImage(image_in);
+        	fclose(source_fp);
+        	fclose(dest_fp);
+        	exit(EXIT_FAILURE);
+    	}
 
- 	printBMPHeader(&image->header);
-  	printf("\n");
-  	printBMPImage(image);
+    	applyParallel(image_in, image_out, boxFilter, NUM_THREADS);
+    	//apply(image_in, image_out);
+    	writeImage(dest_name, image_out);
 
-  	freeImage(image);
-  
- 	exit(EXIT_SUCCESS);
+    	// Mostrar información de la imagen de salida
+    	printBMPHeader(&image_out->header);
+    	printf("\n");
+    	printBMPImage(image_out);
+
+    	// Liberar memoria y cerrar archivos
+    	freeImage(image_in);
+    	freeImage(image_out);
+    	fclose(source_fp);
+    	fclose(dest_fp);
+
+    	exit(EXIT_SUCCESS);
 }
