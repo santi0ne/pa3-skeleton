@@ -17,47 +17,6 @@ void createDirectoryIfNotExists(const char* path) {
 	}
 }
 
-void compareFiles(char* file1, char* file2) {
-	FILE* fp1 = fopen(file1, "rb");
-	FILE *fp2 = fopen(file2, "rb");
-
-	if (!fp1 || !fp2) {
-        	printf("error al abrir los archivos para comparacion\n");
-        	return;
-    	}
-
-    	fseek(fp1, 0, SEEK_END);
-    	fseek(fp2, 0, SEEK_END);
-    	long size1 = ftell(fp1);
-    	long size2 = ftell(fp2);
-    	rewind(fp1);
-    	rewind(fp2);
-
-    	if (size1 != size2) {
-        	printf("Archivos tienen diferentes tamanios: %ld vs %ld bytes.\n", size1, size2);
-        	fclose(fp1);
-        	fclose(fp2);
-		return;
-    	}
-
-    	int equal = 1;
-    	for (long i = 0; i < size1; i++) {
-        	if (fgetc(fp1) != fgetc(fp2)) {
-            		equal = 0;
-            		break;
-        	}
-    	}
-
-    	fclose(fp1);
-    	fclose(fp2);
-
-    	if (equal) {
-        	printf("Archivos son identicos!\n");
-    	} else {
-        	printf("Archivos son diferentes!\n");
-    	}
-
-}
 
 int main(int argc, char **argv) {
 	
@@ -79,7 +38,7 @@ int main(int argc, char **argv) {
         	exit(EXIT_FAILURE);
     	}
 
-	/* creacion de directorio para archivo de salida */
+	// creacion de directorio para archivo de salida 
 	char dest_path[1024];
 	snprintf(dest_path, sizeof(dest_path), "%s", dest_name);
 	char *dir = dirname(dest_path);
@@ -134,7 +93,7 @@ int main(int argc, char **argv) {
     	}
 
     	applyParallel(image_in, image_out, boxFilter, NUM_THREADS);
-    	//apply(image_in, image_out);
+    	
     	writeImage(dest_name, image_out);
 
     	// Mostrar información de la imagen de salida

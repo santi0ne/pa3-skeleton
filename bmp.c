@@ -145,7 +145,7 @@ void readImage(FILE *srcFile, BMP_Image *dataImage) {
 
 	readImageData(srcFile, image, data_size);
 	
-	// Allocate memory for dataImage if it's NULL
+	// Alojar memoria para dataImage en caso de este ser NULL
     	if (dataImage == NULL) {
         	dataImage = (BMP_Image *)malloc(sizeof(BMP_Image));
         	if (!dataImage) {
@@ -157,12 +157,12 @@ void readImage(FILE *srcFile, BMP_Image *dataImage) {
         	}
     	}
     	
-    	// Copy the image header
+    	// Copiar el encabezado de la imagen
     	memcpy(&dataImage->header, &image->header, sizeof(BMP_Header));
     	dataImage->norm_height = image->norm_height;
     	dataImage->bytes_per_pixel = image->bytes_per_pixel;
 
-    	// Allocate memory for dataImage pixels
+    	// Alojar memoria para los pixeles de dataImage
     	dataImage->pixels = (Pixel **)malloc(dataImage->norm_height * sizeof(Pixel *));
     	if (!dataImage->pixels) {
         	printf("Error allocating memory for dataImage pixels\n");
@@ -191,10 +191,6 @@ void readImage(FILE *srcFile, BMP_Image *dataImage) {
     	}
 
     	freeImage(image);
-	//memcpy(dataImage, image, sizeof(BMP_Image));
-
-	//free(image->pixels);
-	//free(image);
 }
 
 /* The input arguments are the destination file name, and BMP_Image pointer.
@@ -274,22 +270,18 @@ void freeImage(BMP_Image* image) {
 int checkBMPValid(BMP_Header* header) {
   // Make sure this is a BMP file
   if (header->type != 0x4d42) {
-    printf("type\n");
     return FALSE;
   }
   // Make sure we are getting 24 bits per pixel
   if (header->bits_per_pixel != 24) {
-    printf("bits\n");
     return FALSE;
   }
   // Make sure there is only one image plane
   if (header->planes != 1) {
-    printf("planes\n");
     return FALSE;
   }
   // Make sure there is no compression
   if (header->compression != 0) {
-    printf("compression\n");
     return FALSE;
   }
   return TRUE;
